@@ -14,13 +14,70 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-// напишите эту функцию
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
+vector<path>::const_iterator SearchInIncludeDirectories(const vector<path>& directories, const path& p) {
+    return find_if(directories.begin(), directories.end(), [&p](const path& incl_p) {
+                                                               return filesystem::exists(incl_p / p);
+                                                           });    
+}
+
+bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+    ifstream input_file(in_file);
+    if (!input_file.is_open()) {
+        cerr << "Can't open input file"s << endl;
+        return false;
+    }
+    
+    ofstream output_file(out_file, ios::out | ios::app);
+    if (!output_file.is_open()) {
+        cerr << "Can't open output file"s << endl;
+        return false;
+    }
+    
+    const static regex incl_custom_reg(R"/(\s*#\s*include\s*"([^"]*)"\s*)/");
+    const static regex incl_std_reg(R"/(\s*#\s*include\s*<([^>]*)>\s*)/");
+    smatch file_name;
+    
+    string line;
+    int line_number = 0;
+    while (++line_number, getline(input_file, line)) {
+        path full_path;
+        if (regex_match(line, file_name, incl_custom_reg)) {
+            path p(file_name[1]);
+            full_path = in_file.parent_path() / p; 
+            if (!filesystem::exists(in_file.parent_path() / p)) {
+                const auto search_result = SearchInIncludeDirectories(include_directories, p);
+                if (search_result == include_directories.end()) {
+                    cout << "unknown include file "s << p.filename().string() 
+                         << " at file "s << in_file.string() 
+                         << " at line "s << line_number << endl;
+                    return false;
+                }
+                full_path = *search_result / p;
+                Preprocess(full_path, out_file, include_directories);
+            } else {
+                Preprocess(full_path, out_file, include_directories);                
+            }
+        } else if (regex_match(line, file_name, incl_std_reg)) {
+            path p(file_name[1]);
+            const auto search_result = SearchInIncludeDirectories(include_directories, p);
+            if (search_result == include_directories.end()) {                 
+                cout << "unknown include file "s << p.filename().string() 
+                     << " at file "s << in_file.string() 
+                     << " at line "s << line_number << endl;
+                return false;
+            } 
+            full_path = *search_result / p;
+            Preprocess(full_path, out_file, include_directories);
+        } else {
+            output_file << line << endl;   
+        }
+    }
+    
+    return true;
+}
 
 string GetFileContents(string file) {
     ifstream stream(file);
-
-    // конструируем string по двум итераторам
     return {(istreambuf_iterator<char>(stream)), istreambuf_iterator<char>()};
 }
 
@@ -70,8 +127,7 @@ void Test() {
         file << "// std2\n"s;
     }
 
-    assert((!Preprocess("sources"_p / "a.cpp"_p, "sources"_p / "a.in"_p,
-                                  {"sources"_p / "include1"_p,"sources"_p / "include2"_p})));
+    assert((!Preprocess("sources"_p / "a.cpp"_p, "sources"_p / "a.in"_p, {"sources"_p / "include1"_p,"sources"_p / "include2"_p})));
 
     ostringstream test_out;
     test_out << "// this comment before include\n"
@@ -88,6 +144,7 @@ void Test() {
                 "int SayHello() {\n"
                 "    cout << \"hello, world!\" << endl;\n"s;
 
+    cout << endl << GetFileContents("sources/a.in"s) << endl;
     assert(GetFileContents("sources/a.in"s) == test_out.str());
 }
 
