@@ -14,13 +14,16 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-vector<path>::const_iterator SearchInIncludeDirectories(const vector<path>& directories, const path& p) {
-    return find_if(directories.begin(), directories.end(), [&p](const path& incl_p) {
-                                                               return filesystem::exists(incl_p / p);
-                                                           });    
+vector<path>::const_iterator SearchInIncludeDirectories(
+                             const vector<path>& directories, const path& p) {
+    return find_if(directories.begin(), directories.end(), 
+                  [&p](const path& incl_p) {
+                      return filesystem::exists(incl_p / p);
+                  });    
 }
 
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories) {
+bool Preprocess(const path& in_file, const path& out_file, 
+                const vector<path>& include_directories) {
     ifstream input_file(in_file);
     if (!input_file.is_open()) {
         cerr << "Can't open input file"s << endl;
@@ -45,7 +48,8 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
             path p(file_name[1]);
             full_path = in_file.parent_path() / p; 
             if (!filesystem::exists(in_file.parent_path() / p)) {
-                const auto search_result = SearchInIncludeDirectories(include_directories, p);
+                const auto search_result = 
+                SearchInIncludeDirectories(include_directories, p);
                 if (search_result == include_directories.end()) {
                     cout << "unknown include file "s << p.filename().string() 
                          << " at file "s << in_file.string() 
@@ -59,7 +63,8 @@ bool Preprocess(const path& in_file, const path& out_file, const vector<path>& i
             }
         } else if (regex_match(line, file_name, incl_std_reg)) {
             path p(file_name[1]);
-            const auto search_result = SearchInIncludeDirectories(include_directories, p);
+            const auto search_result = 
+            SearchInIncludeDirectories(include_directories, p);
             if (search_result == include_directories.end()) {                 
                 cout << "unknown include file "s << p.filename().string() 
                      << " at file "s << in_file.string() 
